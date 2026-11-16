@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import base64
+import importlib.util
 import io
 import sys
 import tarfile
@@ -12,9 +12,14 @@ RUNTIME_DIR = Path("/tmp/clearpay-runtime")
 
 if not (RUNTIME_DIR / "app.py").exists():
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    archive_bytes = BUNDLE_PATH.read_bytes()
-    with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:xz") as archive:
+    with tarfile.open(fileobj=io.BytesIO(BUNDLE_PATH.read_bytes()), mode="r:xz") as archive:
         archive.extractall(RUNTIME_DIR)
 
 sys.path.insert(0, str(RUNTIME_DIR))
-from app import app as app  # noqa: E402,F401
+spec = importlib.util.spec_from_file_location("clearpay_runtime_app", RUNTIME_DIR / "app.py")
+if spec is None or spec.loader is None:
+    raise RuntimeError("Could not load the bundled ClearPay application module")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+app = module.app
